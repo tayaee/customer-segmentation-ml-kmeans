@@ -94,7 +94,7 @@ def _prepare_data(df_uploaded: pd.DataFrame) -> tuple:
     Returns:
         (X_scaled_df, numeric_cols, df, X_scaled) or None
     """
-    st.subheader("5. Data Scaling (Preprocessing)")
+    st.subheader("3. Data Scaling (Preprocessing)")
     st.info("K-Means is distance-based; scaling is essential.")
 
     df: pd.DataFrame = df_uploaded.copy()
