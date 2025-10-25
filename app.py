@@ -437,25 +437,13 @@ def main():
         f"Last commit: {last_updated}"
     )
 
-    data_source_col, example_data_col = st.columns(2)
+    example_data_col, data_source_col = st.columns(2)
     df = None
     file_uploaded = False
 
-    # 1. File Uploader
-    with data_source_col:
-        st.subheader("1a. Upload Data File (Input Option #1)")
-        uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
-        if uploaded_file is not None:
-            try:
-                df = pd.read_csv(uploaded_file)
-                file_uploaded = True
-            except Exception as e:
-                st.error(f"File processing error: {e}")
-                st.info("Ensure the file is CSV and contains numeric fields.")
-
-    # 2. Example Data Button (Right 50%)
+    # 1a. Example Data Button (Right 50%)
     with example_data_col:
-        st.subheader("1b. Use Example Data (Input Option #2)")
+        st.subheader("1a. Use Example Data (Input Option #2)")
         # Manage data loading state using Streamlit session state
         if "df_loaded" not in st.session_state:
             st.session_state["df_loaded"] = None
@@ -470,6 +458,18 @@ def main():
                 st.error(f"Error: Example data file '{example_file_path}' not found. Check file path.")
             except Exception as e:
                 st.error(f"Error loading example data: {e}")
+
+    # 1b. File Uploader
+    with data_source_col:
+        st.subheader("1b. Upload Data File (Input Option #1)")
+        uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
+        if uploaded_file is not None:
+            try:
+                df = pd.read_csv(uploaded_file)
+                file_uploaded = True
+            except Exception as e:
+                st.error(f"File processing error: {e}")
+                st.info("Ensure the file is CSV and contains numeric fields.")
 
     # Check file upload or example data load state
     if st.session_state["df_loaded"] is not None and not file_uploaded:
