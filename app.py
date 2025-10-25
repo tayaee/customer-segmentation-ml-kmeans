@@ -94,7 +94,7 @@ def _prepare_data(df_uploaded: pd.DataFrame) -> tuple:
     Returns:
         (X_scaled_df, numeric_cols, df, X_scaled) or None
     """
-    st.subheader("3. Data Scaling (Preprocessing)")
+    st.subheader("5. Data Scaling (Preprocessing)")
     st.info("K-Means is distance-based; scaling is essential.")
 
     df: pd.DataFrame = df_uploaded.copy()
@@ -366,7 +366,7 @@ def _explore_tsne_perplexity(
     Performs t-SNE for EDA purposes to visually explore cluster potential,
     and generates charts for various Perplexity values.
     """
-    st.header("4. EDA - T-SNE Perplexity Exploration")
+    st.header("4. EDA - t-SNE Perplexity Exploration")
 
     X: np.ndarray = X_scaled_df.values  # Convert to numpy array
     N_SAMPLES: int = len(X)
@@ -383,7 +383,7 @@ def _explore_tsne_perplexity(
         st.warning(f"Warning: Data sample count ({N_SAMPLES}) is too small for standard t-SNE perplexity exploration.")
         return
 
-    st.info(f"Trying t-SNE with perplexity values **{perplexity_list}** to visually identify clusters...")
+    st.info(f"Trying t-SNE with perplexity values **{perplexity_list}** to visually identify clusters on 2D...")
 
     # Create columns for chart layout (maximum 4)
     cols = st.columns(min(len(perplexity_list), 4))
@@ -510,7 +510,7 @@ def main():
         _explore_tsne_perplexity(X_scaled_df, numeric_cols)
 
         # 5. Analysis Execution Button
-        if st.button("Click to Start Analysis"):
+        if st.button("Click to Find k and run K-Means Method"):
             run_kmeans_analysis(df, label_criterion)
 
 
