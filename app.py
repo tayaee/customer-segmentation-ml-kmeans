@@ -337,7 +337,7 @@ def _explore_tsne_perplexity(
     # Adjust the list of Perplexity values to explore based on data size.
     # Generally, smaller N_SAMPLES requires exploring smaller values, and vice versa.
     # Standard values between 5 and 50 are typically used.
-    perplexity_list: list[int] = [5, 10, 20, 40, 50, 75, 100, 150]
+    perplexity_list: list[int] = [5, 10, 20, 30, 40, 50]
 
     # Adjust if Perplexity is too large compared to the number of data samples
     max_perplexity = max(5, int(N_SAMPLES / 3) - 1)
