@@ -1,4 +1,5 @@
 import logging
+import subprocess
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -339,12 +340,30 @@ def run_kmeans_analysis(
     _profile_clusters(alphabet_labels, cluster_summary, label_criterion, numeric_cols)
 
 
+def get_last_commit_timestamp(repo_path=".") -> str:
+    """Gets the timestamp of the last Git commit."""
+    try:
+        # Note: This command must remain compact for the user's request.
+        result = subprocess.run(
+            ["git", "log", "-1", "--format=%cI"],
+            cwd=repo_path,
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        return result.stdout.strip()
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return "N/A"
+
+
 # --- Streamlit UI Main Function ---
 def main():
+    last_updated: str = get_last_commit_timestamp()
     st.title("K-Means Clustering App")
     st.markdown(
         "This app performs K-Means clustering on the data and visualizes the results. "
-        "Repository at https://github.com/tayaee/customer-segmentation-ml-kmeans/"
+        "Repository at https://github.com/tayaee/customer-segmentation-ml-kmeans/. "
+        f"Last commit: {last_updated}"
     )
 
     data_source_col, example_data_col = st.columns(2)
