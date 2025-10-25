@@ -383,7 +383,7 @@ def _explore_tsne_perplexity(
         st.warning(f"Warning: Data sample count ({N_SAMPLES}) is too small for standard t-SNE perplexity exploration.")
         return
 
-    st.info(f"Trying t-SNE with perplexity values: **{perplexity_list}**")
+    st.info(f"Trying t-SNE with perplexity values **{perplexity_list}** to visually identify clusters...")
 
     # Create columns for chart layout (maximum 4)
     cols = st.columns(min(len(perplexity_list), 4))
@@ -430,7 +430,7 @@ def _explore_tsne_perplexity(
 # --- Streamlit UI Main Function ---
 def main():
     last_updated: str = get_last_commit_timestamp()
-    st.title("K-Means Clustering App")
+    st.title("Segmenting Customers using ML K-Means")
     st.markdown(
         "This app performs K-Means clustering on the data and visualizes the results. "
         "Repository at https://github.com/tayaee/customer-segmentation-ml-kmeans/. "
