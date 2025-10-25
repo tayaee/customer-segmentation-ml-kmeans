@@ -41,7 +41,12 @@ def get_data_summary(df: pd.DataFrame, cluster_col: str) -> pd.DataFrame:
     return summary.sort_values(by="Count", ascending=False)
 
 
-def profile_cluster(cluster_label: str, summary: pd.DataFrame, sort_col: str, original_cols: list[str]) -> str:
+def profile_cluster(
+    cluster_label: str,
+    summary: pd.DataFrame,
+    sort_col: str,
+    original_cols: list[str],
+) -> str:
     """Performs natural language profiling based on cluster centroids."""
 
     # Get the cluster row by label
@@ -78,104 +83,118 @@ def profile_cluster(cluster_label: str, summary: pd.DataFrame, sort_col: str, or
     return "\n".join(profile)
 
 
-def run_kmeans_analysis(df_uploaded: pd.DataFrame, label_criterion: str):
-    """Runs K-Means analysis step-by-step and prints to Streamlit."""
+def _prepare_data(df_uploaded: pd.DataFrame) -> tuple:
+    """Prepares data for clustering and performs scaling.
 
-    if "recommended_k_value" not in st.session_state:
-        st.session_state.recommended_k_value = None
+    Args:
+        df_uploaded: The original uploaded DataFrame.
 
-    st.header("K-Means Clustering Analysis Results")
-
-    # --- Data Preparation ---
-    df = df_uploaded.copy()
-
-    # Select only numeric fields for clustering
-    numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-    if not numeric_cols:
-        st.error("Error: No numeric data fields available for clustering.")
-        return
-
-    X = df[numeric_cols]
-
-    # 1. Data Scaling
+    Returns:
+        (X_scaled_df, numeric_cols, df, X_scaled) or None
+    """
     st.subheader("1. Data Scaling (Preprocessing)")
     st.info("K-Means is distance-based; scaling is essential.")
-    scaler = StandardScaler()
-    X_scaled = scaler.fit_transform(X)
-    X_scaled_df = pd.DataFrame(X_scaled, columns=numeric_cols)
+
+    df: pd.DataFrame = df_uploaded.copy()
+    numeric_cols: list[str] = df.select_dtypes(include=np.number).columns.tolist()
+
+    if not numeric_cols:
+        st.error("Error: No numeric data fields available for clustering.")
+        return None, None, None, None
+
+    X: pd.DataFrame = df[numeric_cols]
+
+    # Check data sufficiency
+    if len(X) < 20:
+        st.error("Data count is too small to perform clustering (min 20 samples needed).")
+        return None, None, None, None
+
+    # Execute scaling
+    scaler: StandardScaler = StandardScaler()
+    X_scaled: np.ndarray = scaler.fit_transform(X)
+    X_scaled_df: pd.DataFrame = pd.DataFrame(X_scaled, columns=numeric_cols)
     st.dataframe(X_scaled_df.head())
 
-    # --- Find Optimal K (Elbow Method) ---
+    return X_scaled_df, numeric_cols, df, X_scaled
+
+
+def _find_optimal_k(X_scaled: np.ndarray, n_samples: int) -> tuple[int, int]:
+    """Finds the optimal K using the Elbow method and generates the plot."""
     st.subheader("2. Find Optimal Cluster Count (K) - Elbow Method")
 
-    # Calculate SSE
-    sse = {}
-    K_MAX = min(10, len(X) // 20)  # Max K is the lesser of 10 or N/20. Too large K does not help the analysis team.
-    if K_MAX < 2:
-        st.error("Data count is too small to perform clustering (min 20 samples needed).")
-        return
+    K_MAX = min(10, n_samples // 20)
+    sse: dict[int, float] = {}
 
+    # Calculate SSE
     for k in range(1, K_MAX + 1):
-        kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+        kmeans: KMeans = KMeans(n_clusters=k, random_state=42, n_init=10)
         kmeans.fit(X_scaled)
         sse[k] = kmeans.inertia_
 
-    # Elbow Plot
+    # Generate Elbow Plot
     def create_elbow_plot(sse_data):
         fig, ax = plt.subplots(figsize=(10, 6))
-
         ax.plot(list(sse_data.keys()), list(sse_data.values()), marker="o")
-
         ax.set_title("Elbow Method for Optimal K")
         ax.set_xlabel("Number of Clusters (K)")
         ax.set_ylabel("Sum of Squared Errors (SSE)")
         ax.grid(True)
-
         return fig
 
     fig = create_elbow_plot(sse)
     st.pyplot(fig)
 
-    # Automatic K estimation (simple heuristics)
+    # Automatic K estimation (simple heuristic)
     if len(sse) >= 3:
-        # Look for the point of maximum curvature (diminishing returns)
-        diff = pd.Series(sse).diff().abs().dropna()
-        diff_of_diff = diff.diff().abs().dropna()
-        idxmin: int = diff_of_diff.idxmin()  # type: ignore
-        optimal_k_auto = idxmin + 1
+        diff: pd.Series = pd.Series(sse).diff().abs().dropna()
+        diff_of_diff: pd.Series = diff.diff().abs().dropna()
+        idxmin: int | str = diff_of_diff.idxmin()
+        optimal_k_auto = int(idxmin) + 1
     else:
-        optimal_k_auto = 3  # Default if not enough data points
+        optimal_k_auto = 3
 
-    if st.session_state.recommended_k_value is None:
+    return optimal_k_auto, K_MAX
+
+
+def _get_user_k_selection(optimal_k_auto: int, K_MAX: int) -> int:
+    """Gets the K value from the user and updates the session state."""
+    # Initialize session state
+    if "recommended_k_value" not in st.session_state or st.session_state.recommended_k_value is None:
         st.session_state.recommended_k_value = optimal_k_auto
-        logger.info("Using automatic K value: %s", st.session_state.recommended_k_value)
-    else:
-        logger.info("Using user supplied K value: %s", st.session_state.recommended_k_value)
 
-    # User selection for K
+    # Streamlit slider widget
     recommended_k = st.select_slider(
         "**Select Optimal K (Based on Elbow curve)**",
         options=range(2, K_MAX + 1),
         value=st.session_state.recommended_k_value,
         key="k_slider_widget",
-        on_change=save_slider_value_to_session,
+        on_change=save_slider_value_to_session,  # External function
     )
     st.success(f"Selected Optimal Cluster Count (K): **{recommended_k}**")
+    return recommended_k
 
-    # --- Silhouette Score ---
+
+def _run_and_evaluate_clustering(
+    X_scaled: np.ndarray,
+    df: pd.DataFrame,
+    recommended_k: int,
+) -> pd.DataFrame:
+    """Runs the final clustering model and evaluates it using the Silhouette score."""
     st.subheader(f"3. Silhouette Score Evaluation (K={recommended_k})")
 
-    kmeans_final = KMeans(n_clusters=recommended_k, random_state=42, n_init=10)
+    # Execute K-Means
+    kmeans_final: KMeans = KMeans(n_clusters=recommended_k, random_state=42, n_init=10)
     df["Cluster_Num"] = kmeans_final.fit_predict(X_scaled)
 
     # Calculate Silhouette score
-    silhouette_avg = silhouette_score(X_scaled, df["Cluster_Num"])
+    silhouette_avg: float = float(silhouette_score(X_scaled, df["Cluster_Num"]))
     st.metric(
         "Average Silhouette Score",
         f"{silhouette_avg:.4f}",
         help="Closer to 1 means better clustering quality. Above 0.5 is generally good.",
     )
 
+    # Quality comment
     if silhouette_avg > 0.6:
         st.success("Excellent quality! (Above 0.6)")
     elif silhouette_avg > 0.4:
@@ -183,37 +202,48 @@ def run_kmeans_analysis(df_uploaded: pd.DataFrame, label_criterion: str):
     else:
         st.warning("Low quality. Review K or variables. (Below 0.4)")
 
-    # --- Cluster Labeling ---
+    return df
+
+
+def _label_and_summarize_clusters(
+    df: pd.DataFrame,
+    recommended_k: int,
+    label_criterion: str,
+) -> tuple[pd.DataFrame, pd.DataFrame, list]:
+    """Assigns alphabetical labels to clusters and calculates summary statistics."""
     st.subheader(f"4. Cluster Labeling and Statistics (Based on {label_criterion})")
 
-    # Label clusters alphabetically (A, B, C...) based on the mean of the criterion field (High-to-Low)
+    # 1. Calculate and sort cluster means by the criterion field
+    cluster_means: pd.Series = df.groupby("Cluster_Num")[label_criterion].mean()
+    sorted_clusters: pd.Series = cluster_means.sort_values(ascending=False)
 
-    # 1. Calculate the mean of the criterion field per cluster
-    cluster_means = df.groupby("Cluster_Num")[label_criterion].mean()
+    # 2. Create alphabetical label mapping ('A' has the highest mean)
+    alphabet_labels: list = [chr(65 + i) for i in range(recommended_k)]
+    label_map: dict = {cluster_num: alphabet_labels[i] for i, cluster_num in enumerate(sorted_clusters.index)}
 
-    # 2. Sort clusters by mean in descending order
-    sorted_clusters = cluster_means.sort_values(ascending=False)
-
-    # 3. Create alphabetical label mapping ('A' is the highest mean)
-    alphabet_labels = [chr(65 + i) for i in range(recommended_k)]  # 65 = 'A'
-    label_map = {cluster_num: alphabet_labels[i] for i, cluster_num in enumerate(sorted_clusters.index)}
-
-    # 4. Create new alphabetical label column
+    # 3. Add the alphabetical label column
     df["Cluster_Label"] = df["Cluster_Num"].map(label_map)
     st.markdown(f"**Labeling Criterion:** Cluster mean of **`{label_criterion}`** (High-to-Low)")
-    st.dataframe(df[["Cluster_Num", "Cluster_Label"] + numeric_cols].head())
 
     # Cluster summary statistics (Centroids)
-    cluster_summary = get_data_summary(df, "Cluster_Label")
+    cluster_summary: pd.DataFrame = get_data_summary(df, "Cluster_Label")  # External function
     st.markdown("### Cluster Summary Statistics (Centroids)")
 
+    # float formatting function
     def format_float(x):
         return f"{x:,.2f}" if isinstance(x, (int, float)) else x
 
     st.dataframe(cluster_summary.style.format(format_float))
 
-    # --- Visualization ---
-    # st.markdown("---")
+    return df, cluster_summary, alphabet_labels
+
+
+def _visualize_clusters(
+    df: pd.DataFrame,
+    label_criterion: str,
+    alphabet_labels: list,
+):
+    """Visualizes cluster size and the distribution of the criterion field."""
     st.subheader("5. Cluster Visualization Analysis")
 
     col1, col2 = st.columns(2)
@@ -231,7 +261,7 @@ def run_kmeans_analysis(df_uploaded: pd.DataFrame, label_criterion: str):
         ax.set_title("Distribution of Samples Across Clusters")
         st.pyplot(fig)
 
-    # 5.2. Boxplot (Label Criterion Field)
+    # 5.2. Boxplot (Criterion Field Distribution)
     with col2:
         st.markdown(f"#### Boxplot: {label_criterion} Distribution")
         fig, ax = plt.subplots(figsize=(8, 6))
@@ -245,13 +275,68 @@ def run_kmeans_analysis(df_uploaded: pd.DataFrame, label_criterion: str):
         ax.set_title(f"Distribution of {label_criterion} by Cluster")
         st.pyplot(fig)
 
-    # --- Natural Language Profiling ---
+
+def _profile_clusters(
+    alphabet_labels: list,
+    cluster_summary: pd.DataFrame,
+    label_criterion: str,
+    numeric_cols: list,
+):
+    """Generates and outputs natural language profiling based on cluster summaries."""
     st.header("6. Natural Language Cluster Profiling")
     st.info(f"Each cluster is profiled based on the selected criterion: **`{label_criterion}`**.")
 
     for label in alphabet_labels:
+        # profile_cluster is an external function
         profile_text = profile_cluster(label, cluster_summary, label_criterion, numeric_cols)
         st.markdown(profile_text)
+
+
+def run_kmeans_analysis(
+    df_uploaded: pd.DataFrame,
+    label_criterion: str,
+):
+    """
+    Executes the complete K-Means analysis steps in logical units and outputs results to Streamlit.
+
+    Args:
+        df_uploaded: The original DataFrame to be analyzed.
+        label_criterion: The field name used as the basis for cluster labeling.
+    """
+    st.header("K-Means Clustering Analysis Results")
+
+    # 1. Data Preparation and Scaling
+    prep_results: tuple = _prepare_data(df_uploaded)
+    if prep_results is None:
+        return
+
+    # Unpack results with type hints
+    X_scaled_df: pd.DataFrame
+    numeric_cols: list[str]
+    df: pd.DataFrame
+    X_scaled: np.ndarray
+    X_scaled_df, numeric_cols, df, X_scaled = prep_results  # type: ignore
+
+    # 2. Optimal K Determination (Elbow Method)
+    optimal_k_auto: int
+    K_MAX: int
+    optimal_k_auto, K_MAX = _find_optimal_k(X_scaled, len(df))
+
+    # 3. User K Selection
+    # recommended_k: int
+    recommended_k: int = _get_user_k_selection(optimal_k_auto, K_MAX)
+
+    # 4. Clustering Execution and Evaluation (Silhouette Score)
+    df = _run_and_evaluate_clustering(X_scaled, df, recommended_k)
+
+    # 5. Cluster Labeling and Summary (Centroids)
+    df, cluster_summary, alphabet_labels = _label_and_summarize_clusters(df, recommended_k, label_criterion)
+
+    # 6. Visualization
+    _visualize_clusters(df, label_criterion, alphabet_labels)
+
+    # 7. Natural Language Profiling
+    _profile_clusters(alphabet_labels, cluster_summary, label_criterion, numeric_cols)
 
 
 # --- Streamlit UI Main Function ---
