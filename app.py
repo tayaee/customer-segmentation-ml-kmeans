@@ -443,7 +443,7 @@ def main():
 
     # 1a. Example Data Button (Right 50%)
     with example_data_col:
-        st.subheader("1a. Use Example Data (Input Option #2)")
+        st.subheader("1a. Use Example Data (Input Option #1)")
         # Manage data loading state using Streamlit session state
         if "df_loaded" not in st.session_state:
             st.session_state["df_loaded"] = None
@@ -461,7 +461,7 @@ def main():
 
     # 1b. File Uploader
     with data_source_col:
-        st.subheader("1b. Upload Data File (Input Option #1)")
+        st.subheader("1b. Upload Data File (Input Option #2)")
         uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
         if uploaded_file is not None:
             try:
