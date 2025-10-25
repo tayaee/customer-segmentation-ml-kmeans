@@ -435,7 +435,7 @@ def _explore_tsne_perplexity(
 # --- Streamlit UI Main Function ---
 def main():
     last_updated: str = get_last_commit_timestamp()
-    st.title("Segmenting Customers using ML K-Means")
+    st.title("Segmenting Data using ML K-Means")
     st.markdown(
         "This app performs K-Means clustering on the data and visualizes the results. "
         "Repository at https://github.com/tayaee/customer-segmentation-ml-kmeans/. "
