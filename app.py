@@ -85,7 +85,10 @@ def profile_cluster(
     return "\n".join(profile)
 
 
-def _prepare_data(df_uploaded: pd.DataFrame) -> tuple:
+def _prepare_data(
+    df_uploaded: pd.DataFrame,
+    produce_output: bool = True,
+) -> tuple:
     """Prepares data for clustering and performs scaling.
 
     Args:
@@ -94,8 +97,9 @@ def _prepare_data(df_uploaded: pd.DataFrame) -> tuple:
     Returns:
         (X_scaled_df, numeric_cols, df, X_scaled) or None
     """
-    st.subheader("5. Data Scaling (Preprocessing)")
-    st.info("K-Means is distance-based; scaling is essential.")
+    if produce_output:
+        st.subheader("4. Data Scaling (Preprocessing)")
+        st.info("K-Means is distance-based; scaling is essential.")
 
     df: pd.DataFrame = df_uploaded.copy()
     numeric_cols: list[str] = df.select_dtypes(include=np.number).columns.tolist()
@@ -115,14 +119,15 @@ def _prepare_data(df_uploaded: pd.DataFrame) -> tuple:
     scaler: StandardScaler = StandardScaler()
     X_scaled: np.ndarray = scaler.fit_transform(X)
     X_scaled_df: pd.DataFrame = pd.DataFrame(X_scaled, columns=numeric_cols)
-    st.dataframe(X_scaled_df.head())
+    if produce_output:
+        st.dataframe(X_scaled_df.head())
 
     return X_scaled_df, numeric_cols, df, X_scaled
 
 
 def _find_optimal_k(X_scaled: np.ndarray, n_samples: int) -> tuple[int, int]:
     """Finds the optimal K using the Elbow method and generates the plot."""
-    st.subheader("6. Find Optimal Cluster Count (K) - Elbow Method")
+    st.subheader("5. Find Optimal Cluster Count (K) - Elbow Method")
 
     K_MAX = min(10, n_samples // 20)
     sse: dict[int, float] = {}
@@ -182,7 +187,7 @@ def _run_and_evaluate_clustering(
     recommended_k: int,
 ) -> pd.DataFrame:
     """Runs the final clustering model and evaluates it using the Silhouette score."""
-    st.subheader(f"7. Silhouette Score Evaluation (K={recommended_k})")
+    st.subheader(f"6. Silhouette Score Evaluation (K={recommended_k})")
 
     # Execute K-Means
     kmeans_final: KMeans = KMeans(n_clusters=recommended_k, random_state=42, n_init=10)
@@ -214,7 +219,7 @@ def _label_and_summarize_clusters(
     label_criterion: str,
 ) -> tuple[pd.DataFrame, pd.DataFrame, list]:
     """Assigns alphabetical labels to clusters and calculates summary statistics."""
-    st.subheader(f"8. Cluster Labeling and Statistics (Based on {label_criterion})")
+    st.subheader(f"7. Cluster Labeling and Statistics (Based on {label_criterion})")
 
     # 1. Calculate and sort cluster means by the criterion field
     cluster_means: pd.Series = df.groupby("Cluster_Num")[label_criterion].mean()
@@ -247,7 +252,7 @@ def _visualize_clusters(
     alphabet_labels: list,
 ):
     """Visualizes cluster size and the distribution of the criterion field."""
-    st.subheader("9. Cluster Visualization Analysis")
+    st.subheader("8. Cluster Visualization Analysis")
 
     col1, col2 = st.columns(2)
 
@@ -286,7 +291,7 @@ def _profile_clusters(
     numeric_cols: list,
 ):
     """Generates and outputs natural language profiling based on cluster summaries."""
-    st.header("10. Natural Language Cluster Profiling")
+    st.header("9. Natural Language Cluster Profiling")
     st.info(f"Each cluster is profiled based on the selected criterion: **`{label_criterion}`**.")
 
     for label in alphabet_labels:
@@ -366,7 +371,7 @@ def _explore_tsne_perplexity(
     Performs t-SNE for EDA purposes to visually explore cluster potential,
     and generates charts for various Perplexity values.
     """
-    st.header("4. EDA - t-SNE Perplexity Exploration")
+    st.header("3. EDA - t-SNE Perplexity Exploration")
 
     X: np.ndarray = X_scaled_df.values  # Convert to numpy array
     N_SAMPLES: int = len(X)
@@ -502,7 +507,7 @@ def main():
         )
 
         # 4. Visually identify clusters
-        prep_results: tuple = _prepare_data(df)
+        prep_results: tuple = _prepare_data(df, produce_output=False)
         if prep_results is None:
             return
         X_scaled_df: pd.DataFrame
