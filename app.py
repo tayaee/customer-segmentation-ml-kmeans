@@ -7,6 +7,7 @@ import pandas as pd
 import seaborn as sns
 import streamlit as st
 from sklearn.cluster import KMeans
+from sklearn.manifold import TSNE
 from sklearn.metrics import silhouette_score
 from sklearn.preprocessing import StandardScaler
 
@@ -93,7 +94,7 @@ def _prepare_data(df_uploaded: pd.DataFrame) -> tuple:
     Returns:
         (X_scaled_df, numeric_cols, df, X_scaled) or None
     """
-    st.subheader("1. Data Scaling (Preprocessing)")
+    st.subheader("5. Data Scaling (Preprocessing)")
     st.info("K-Means is distance-based; scaling is essential.")
 
     df: pd.DataFrame = df_uploaded.copy()
@@ -121,7 +122,7 @@ def _prepare_data(df_uploaded: pd.DataFrame) -> tuple:
 
 def _find_optimal_k(X_scaled: np.ndarray, n_samples: int) -> tuple[int, int]:
     """Finds the optimal K using the Elbow method and generates the plot."""
-    st.subheader("2. Find Optimal Cluster Count (K) - Elbow Method")
+    st.subheader("6. Find Optimal Cluster Count (K) - Elbow Method")
 
     K_MAX = min(10, n_samples // 20)
     sse: dict[int, float] = {}
@@ -181,7 +182,7 @@ def _run_and_evaluate_clustering(
     recommended_k: int,
 ) -> pd.DataFrame:
     """Runs the final clustering model and evaluates it using the Silhouette score."""
-    st.subheader(f"3. Silhouette Score Evaluation (K={recommended_k})")
+    st.subheader(f"7. Silhouette Score Evaluation (K={recommended_k})")
 
     # Execute K-Means
     kmeans_final: KMeans = KMeans(n_clusters=recommended_k, random_state=42, n_init=10)
@@ -196,12 +197,13 @@ def _run_and_evaluate_clustering(
     )
 
     # Quality comment
+    explain_silhouette_score = "below 0.4: Low quality, 0.4 to 0.6: Good quality, above 0.6: ExExcellent"
     if silhouette_avg > 0.6:
-        st.success("Excellent quality! (Above 0.6)")
+        st.success(f"Excellent quality! ({explain_silhouette_score})")
     elif silhouette_avg > 0.4:
-        st.info("Good quality. (0.4 to 0.6)")
+        st.info(f"Good quality. ({explain_silhouette_score})")
     else:
-        st.warning("Low quality. Review K or variables. (Below 0.4)")
+        st.warning(f"Low quality. Review K or variables. ({explain_silhouette_score})")
 
     return df
 
@@ -212,7 +214,7 @@ def _label_and_summarize_clusters(
     label_criterion: str,
 ) -> tuple[pd.DataFrame, pd.DataFrame, list]:
     """Assigns alphabetical labels to clusters and calculates summary statistics."""
-    st.subheader(f"4. Cluster Labeling and Statistics (Based on {label_criterion})")
+    st.subheader(f"8. Cluster Labeling and Statistics (Based on {label_criterion})")
 
     # 1. Calculate and sort cluster means by the criterion field
     cluster_means: pd.Series = df.groupby("Cluster_Num")[label_criterion].mean()
@@ -245,7 +247,7 @@ def _visualize_clusters(
     alphabet_labels: list,
 ):
     """Visualizes cluster size and the distribution of the criterion field."""
-    st.subheader("5. Cluster Visualization Analysis")
+    st.subheader("9. Cluster Visualization Analysis")
 
     col1, col2 = st.columns(2)
 
@@ -284,7 +286,7 @@ def _profile_clusters(
     numeric_cols: list,
 ):
     """Generates and outputs natural language profiling based on cluster summaries."""
-    st.header("6. Natural Language Cluster Profiling")
+    st.header("10. Natural Language Cluster Profiling")
     st.info(f"Each cluster is profiled based on the selected criterion: **`{label_criterion}`**.")
 
     for label in alphabet_labels:
@@ -356,6 +358,75 @@ def get_last_commit_timestamp(repo_path=".") -> str:
         return "N/A"
 
 
+def _explore_tsne_perplexity(
+    X_scaled_df: pd.DataFrame,
+    numeric_cols: list[str],
+):
+    """
+    Performs t-SNE for EDA purposes to visually explore cluster potential,
+    and generates charts for various Perplexity values.
+    """
+    st.header("4. EDA - T-SNE Perplexity Exploration")
+
+    X: np.ndarray = X_scaled_df.values  # Convert to numpy array
+    N_SAMPLES: int = len(X)
+
+    # Adjust the list of Perplexity values to explore based on data size.
+    # Generally, smaller N_SAMPLES requires exploring smaller values, and vice versa.
+    # Standard values between 5 and 50 are typically used.
+    perplexity_list: list[int] = [5, 10, 20, 40, 50, 75, 100, 150]
+
+    # Adjust if Perplexity is too large compared to the number of data samples
+    max_perplexity = max(5, int(N_SAMPLES / 3) - 1)
+    perplexity_list = [p for p in perplexity_list if p < max_perplexity]
+    if not perplexity_list:
+        st.warning(f"Warning: Data sample count ({N_SAMPLES}) is too small for standard t-SNE perplexity exploration.")
+        return
+
+    st.info(f"Trying t-SNE with perplexity values: **{perplexity_list}**")
+
+    # Create columns for chart layout (maximum 4)
+    cols = st.columns(min(len(perplexity_list), 4))
+
+    for i, p in enumerate(perplexity_list):
+        with cols[i % len(cols)]:  # Layout placement
+            st.markdown(f"**Perplexity: {p}**")
+            with st.spinner(f"Calculating t-SNE for Perplexity={p}..."):
+                # Execute t-SNE
+                try:
+                    tsne = TSNE(
+                        n_components=2,
+                        perplexity=p,
+                        random_state=42,
+                        n_jobs=-1,
+                        init="pca",
+                        learning_rate="auto",
+                    )
+                    X_tsne = tsne.fit_transform(X)
+                except ValueError as e:
+                    # t-SNE error handling (e.g., when data count is too small)
+                    st.error(f"t-SNE error (p={p}): {e}")
+                    continue
+
+                # Convert results to DataFrame
+                tsne_df = pd.DataFrame(data=X_tsne, columns=["TSNE_Dim_1", "TSNE_Dim_2"])
+
+                # Visualization (Scatter Plot)
+                fig, ax = plt.subplots(figsize=(6, 5))  # Adjust for smaller size
+                sns.scatterplot(x="TSNE_Dim_1", y="TSNE_Dim_2", data=tsne_df, alpha=0.7, ax=ax)
+                ax.set_title(f"t-SNE Plot (Perplexity={p})", fontsize=10)
+                ax.set_xticks([])
+                ax.set_yticks([])
+                ax.set_xlabel("")
+                ax.set_ylabel("")
+                st.pyplot(fig)
+                plt.close(fig)  # Close to manage memory
+    st.markdown(
+        "Have you found the perplexity value where the clusters are clearly visible in those charts? "
+        "And have you gotten an idea of approximately how many clusters would be appropriate?"
+    )
+
+
 # --- Streamlit UI Main Function ---
 def main():
     last_updated: str = get_last_commit_timestamp()
@@ -372,7 +443,7 @@ def main():
 
     # 1. File Uploader
     with data_source_col:
-        st.subheader("1. Upload Data File")
+        st.subheader("1a. Upload Data File (Input Option #1)")
         uploaded_file = st.file_uploader("Upload a CSV file", type=["csv"])
         if uploaded_file is not None:
             try:
@@ -384,7 +455,7 @@ def main():
 
     # 2. Example Data Button (Right 50%)
     with example_data_col:
-        st.subheader("2. Use Example Data")
+        st.subheader("1b. Use Example Data (Input Option #2)")
         # Manage data loading state using Streamlit session state
         if "df_loaded" not in st.session_state:
             st.session_state["df_loaded"] = None
@@ -412,19 +483,16 @@ def main():
 
     # --- Data Processing and Analysis Execution ---
     if df is not None:
-        # st.markdown("---")
-        st.subheader("Loaded Data Preview (Top 5)")
+        st.subheader("2. Loaded Data Preview (Top 5)")
         st.dataframe(df.head())
 
         numeric_cols = df.select_dtypes(include=np.number).columns.tolist()
-
         if not numeric_cols:
             st.error("Error: No numeric fields found for clustering.")
             return
 
         # 3. Cluster Labeling Criterion Selection
-        # st.markdown("---")
-        # Default to 'Income' if present, otherwise use the first numeric field
+        # Default to 'Income' if present, otherwise use the first numeric field for example data.
         default_index = numeric_cols.index("Income") if "Income" in numeric_cols else 0
 
         label_criterion = st.selectbox(
@@ -433,8 +501,16 @@ def main():
             index=default_index,
         )
 
-        # 4. Analysis Execution Button
-        if st.button("Start Analysis"):
+        # 4. Visually identify clusters
+        prep_results: tuple = _prepare_data(df)
+        if prep_results is None:
+            return
+        X_scaled_df: pd.DataFrame
+        X_scaled_df, _, _, _ = prep_results
+        _explore_tsne_perplexity(X_scaled_df, numeric_cols)
+
+        # 5. Analysis Execution Button
+        if st.button("Click to Start Analysis"):
             run_kmeans_analysis(df, label_criterion)
 
 
