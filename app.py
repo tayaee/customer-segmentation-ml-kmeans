@@ -512,7 +512,7 @@ def main():
 
         # 5a. Run t-SNE (EDA)
         with col_tsne:
-            if st.button("Run t-SNE (EDA)"):
+            if st.button("Run Visual Analysis (t-SNE)"):
                 prep_results: tuple = _kmeans_1_prepare_data(df, produce_output_to_ui=False)
                 if prep_results is None:
                     return
@@ -523,7 +523,10 @@ def main():
 
         # 5b. Run K-Means (Clustering)
         with col_kmeans:
-            if st.button("Run K-Means (Clustering)"):
+            k_val = st.session_state.get("recommended_k_value")
+            k_label = f"K={k_val}" if k_val is not None else "K=auto"
+            button_label = f"Run Clustering (K-Means) [{k_label}]"
+            if st.button(button_label):
                 st.info("Finding optimal k and running K-Means analysis...")
                 run_kmeans_analysis(df, label_criterion)
 
